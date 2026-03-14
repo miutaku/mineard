@@ -1,7 +1,7 @@
 /**
  * Pages Functions catch-all proxy: forwards /api/* requests to the Worker.
  */
-import type { Fetcher } from '@cloudflare/workers-types';
+import type { Fetcher, PagesFunction } from '@cloudflare/workers-types';
 
 interface Env {
     API_WORKER: Fetcher;
@@ -9,11 +9,14 @@ interface Env {
 
 export const onRequest: PagesFunction<Env> = async (context) => {
     const url = new URL(context.request.url);
-    // Create a new request for the internal API worker
-    const workerRequest = new Request(`http://mineard-api.internal${url.pathname}${url.search}`, context.request);
+    const internalUrl = `http://mineard-api.internal${url.pathname}${url.search}`;
 
-    // Add original host for potential cookie or CORS handling on the backend
-    workerRequest.headers.set('X-Forwarded-Host', url.hostname);
-
-    return await context.env.API_WORKER.fetch(workerRequest);
+    // Forward the request to the internal API worker
+    return await context.env.API_WORKER.fetch(internalUrl, {
+        method: context.request.method,
+        headers: context.request.headers,
+        body: context.request.body,
+        // @ts-ignore - Pages internal fetch handles the redirect/body mapping
+        redirect: 'manual',
+    });
 };
