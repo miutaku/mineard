@@ -12,6 +12,8 @@ import {
     Button,
     Skeleton,
     Alert,
+    Tooltip,
+    ActionIcon,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
@@ -20,6 +22,7 @@ import {
     IconArrowsExchange,
     IconPlayerPlay,
     IconAlertCircle,
+    IconScale,
 } from '@tabler/icons-react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api-client';
@@ -60,9 +63,29 @@ interface DashboardResponse {
     recent_logs: LogEntry[];
 }
 
-function formatMB(mb: number): string {
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-    return `${mb} MB`;
+function formatCapacity(mb: number, offset: number = 0): string {
+    const units = ['MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    let maxUnitIndex = 0;
+    
+    // 1024単位で最大の単位指数を計算
+    let tempValue = Math.abs(mb);
+    while (tempValue >= 1024 && maxUnitIndex < units.length - 1) {
+        tempValue /= 1024;
+        maxUnitIndex++;
+    }
+
+    // 指定されたオフセット分だけ単位を下げる（MBが下限）
+    const targetUnitIndex = Math.max(0, maxUnitIndex - offset);
+    let targetValue = mb;
+    for (let i = 0; i < targetUnitIndex; i++) {
+        targetValue /= 1024;
+    }
+
+    if (targetUnitIndex === 0) {
+        return `${targetValue.toLocaleString()} ${units[targetUnitIndex]}`;
+    }
+    // 小数第2位まで表示（末尾の0は省略）
+    return `${parseFloat(targetValue.toFixed(2))} ${units[targetUnitIndex]}`;
 }
 
 function getUsagePercent(remaining: number, total: number): number {
@@ -99,6 +122,7 @@ function yuzuruneLabel(status: string | null): { label: string; color: string } 
 export default function Dashboard() {
     const { data, loading, error, refetch } = useApi<DashboardResponse>('/dashboard');
     const [yuzuruneLoading, setYuzuruneLoading] = useState(false);
+    const [unitOffset, setUnitOffset] = useState(0);
 
     async function triggerYuzurune() {
         setYuzuruneLoading(true);
@@ -131,8 +155,23 @@ export default function Dashboard() {
 
     return (
         <Stack>
-            <Group justify="space-between">
-                <Title order={2}>ダッシュボード</Title>
+            <Group justify="space-between" align="center">
+                <Group gap="xs">
+                    <Title order={2}>ダッシュボード</Title>
+                    <Tooltip label="表示単位を1段階下げます（例: GB → MB）">
+                        <ActionIcon 
+                            variant="light" 
+                            color="blue" 
+                            onClick={() => setUnitOffset(prev => (prev + 1) % 3)}
+                            title="表示単位の切り替え"
+                        >
+                            <IconScale size={18} />
+                        </ActionIcon>
+                    </Tooltip>
+                    {unitOffset > 0 && (
+                        <Text size="xs" c="dimmed">（単位を下げて表示中）</Text>
+                    )}
+                </Group>
                 <Button
                     leftSection={<IconPlayerPlay size={16} />}
                     variant="light"
@@ -151,7 +190,7 @@ export default function Dashboard() {
                         <Skeleton key={i} height={220} radius="md" />
                     ))
                     : data?.accounts.map((account) => (
-                        <AccountCard key={account.id} account={account} />
+                        <AccountCard key={account.id} account={account} unitOffset={unitOffset} />
                     ))}
             </SimpleGrid>
 
@@ -221,7 +260,7 @@ export default function Dashboard() {
     );
 }
 
-function AccountCard({ account }: { account: AccountData }) {
+function AccountCard({ account, unitOffset }: { account: AccountData; unitOffset: number }) {
     const cap = account.capacity;
     const totalUsed = cap
         ? (cap.baseCapacity - cap.baseRemainingCapacity) +
@@ -263,22 +302,22 @@ function AccountCard({ account }: { account: AccountData }) {
                             ]}
                             label={
                                 <Text ta="center" size="xs" fw={700}>
-                                    {formatMB(totalRemaining)}
+                                    {formatCapacity(totalRemaining, unitOffset)}
                                 </Text>
                             }
                         />
                         <Stack gap={4}>
                             <Group gap="xs">
                                 <IconWifi size={14} />
-                                <Text size="xs">基本: {formatMB(cap.baseRemainingCapacity)}</Text>
+                                <Text size="xs">基本: {formatCapacity(cap.baseRemainingCapacity, unitOffset)}</Text>
                             </Group>
                             <Group gap="xs">
                                 <IconArrowsExchange size={14} />
-                                <Text size="xs">繰越: {formatMB(cap.forwardRemainingCapacity)}</Text>
+                                <Text size="xs">繰越: {formatCapacity(cap.forwardRemainingCapacity, unitOffset)}</Text>
                             </Group>
                             <Group gap="xs">
                                 <IconHeart size={14} />
-                                <Text size="xs">ギフト: {formatMB(cap.giftRemainingCapacity)}</Text>
+                                <Text size="xs">ギフト: {formatCapacity(cap.giftRemainingCapacity, unitOffset)}</Text>
                             </Group>
                         </Stack>
                     </Group>
@@ -288,7 +327,7 @@ function AccountCard({ account }: { account: AccountData }) {
                         <Group justify="space-between" mb={4}>
                             <Text size="xs" c="dimmed">基本パケット</Text>
                             <Text size="xs" c="dimmed">
-                                {formatMB(cap.baseCapacity - cap.baseRemainingCapacity)} / {formatMB(cap.baseCapacity)}
+                                {formatCapacity(cap.baseCapacity - cap.baseRemainingCapacity, unitOffset)} / {formatCapacity(cap.baseCapacity, unitOffset)}
                             </Text>
                         </Group>
                         <Progress
