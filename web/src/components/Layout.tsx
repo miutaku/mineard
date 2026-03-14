@@ -21,6 +21,7 @@ import {
     IconSun,
     IconMoon,
     IconLogout,
+    IconInfinity,
 } from '@tabler/icons-react';
 import { api } from '../lib/api-client';
 
@@ -63,7 +64,8 @@ export default function Layout({ isAdmin = false, userEmail = '' }: { isAdmin?: 
                     <Group>
                         <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
                         <Title order={3} style={{ letterSpacing: '-0.5px' }}>
-                            ⚡ Mineard
+                            <IconInfinity size={24} style={{ verticalAlign: 'middle', marginRight: 4, color: 'var(--mantine-color-green-filled)' }} />
+                            Mineard
                         </Title>
                     </Group>
                     <Group gap="xs">
