@@ -1,0 +1,6 @@
+name = "mineard-web"
+pages_build_output_dir = "dist"
+
+[[services]]
+binding = "API_WORKER"
+service = "mineard-api"
