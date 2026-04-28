@@ -89,7 +89,7 @@ function App() {
                     <Route path="/accounts/add" element={<AddAccount />} />
                     <Route path="/gift-pairs" element={<GiftPairs />} />
                     <Route path="/logs" element={<Logs />} />
-                    {isAdmin && <Route path="/users" element={<Users />} />}
+                    {isAdmin && <Route path="/users" element={<Users userEmail={userEmail} />} />}
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
             )}

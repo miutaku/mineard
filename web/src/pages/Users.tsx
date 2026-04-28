@@ -15,7 +15,7 @@ import {
     LoadingOverlay,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus, IconTrash, IconMail } from '@tabler/icons-react';
+import { IconPlus, IconTrash, IconMail, IconRefresh } from '@tabler/icons-react';
 import { api } from '../lib/api-client';
 
 interface UserRow {
@@ -25,7 +25,13 @@ interface UserRow {
     created_at: string;
 }
 
-export default function Users() {
+const TOTP_RESET_ADMIN_EMAIL = 'admin@mineard.miutaku.work';
+
+interface UsersProps {
+    userEmail: string;
+}
+
+export default function Users({ userEmail }: UsersProps) {
     const [users, setUsers] = useState<UserRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
@@ -66,6 +72,18 @@ export default function Users() {
         }
     }
 
+    async function handleResetTotp(userId: number, email: string) {
+        if (!confirm(`${email} のTOTPをリセットしてもよろしいですか？\n次回ログイン時に再設定が必要になります。`)) {
+            return;
+        }
+        try {
+            await api.post(`/auth/users/${userId}/reset-totp`, {});
+            await loadUsers();
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'リセットに失敗しました');
+        }
+    }
+
     async function handleDelete(userId: number, email: string) {
         if (!confirm(`${email} を削除してもよろしいですか？\nこのユーザーのmineoアカウントもすべて削除されます。`)) {
             return;
@@ -95,7 +113,7 @@ export default function Users() {
                             <Table.Th>メールアドレス</Table.Th>
                             <Table.Th>TOTP</Table.Th>
                             <Table.Th>登録日</Table.Th>
-                            <Table.Th w={60}></Table.Th>
+                            <Table.Th w={90}></Table.Th>
                         </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -120,14 +138,26 @@ export default function Users() {
                                     {new Date(user.created_at).toLocaleDateString('ja-JP')}
                                 </Table.Td>
                                 <Table.Td>
-                                    <ActionIcon
-                                        variant="subtle"
-                                        color="red"
-                                        onClick={() => handleDelete(user.id, user.email)}
-                                        title="削除"
-                                    >
-                                        <IconTrash size={16} />
-                                    </ActionIcon>
+                                    <Group gap={4} justify="flex-end">
+                                        {userEmail === TOTP_RESET_ADMIN_EMAIL && user.totp_setup_complete === 1 && (
+                                            <ActionIcon
+                                                variant="subtle"
+                                                color="orange"
+                                                onClick={() => handleResetTotp(user.id, user.email)}
+                                                title="TOTPリセット"
+                                            >
+                                                <IconRefresh size={16} />
+                                            </ActionIcon>
+                                        )}
+                                        <ActionIcon
+                                            variant="subtle"
+                                            color="red"
+                                            onClick={() => handleDelete(user.id, user.email)}
+                                            title="削除"
+                                        >
+                                            <IconTrash size={16} />
+                                        </ActionIcon>
+                                    </Group>
                                 </Table.Td>
                             </Table.Tr>
                         ))}

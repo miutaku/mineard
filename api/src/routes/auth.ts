@@ -239,6 +239,44 @@ auth.post('/users', async (c) => {
     return c.json({ id: insertResult.meta.last_row_id, email: normalizedEmail }, 201);
 });
 
+/** Reset TOTP for a user (restricted to specific admin emails via TOTP_RESET_ADMIN_EMAIL env var) */
+auth.post('/users/:id/reset-totp', async (c) => {
+    const result = await requireAdmin(c);
+    if (result instanceof Response) return result;
+
+    const allowedEmails = (c.env.TOTP_RESET_ADMIN_EMAIL ?? '')
+        .split(',')
+        .map((e) => e.toLowerCase().trim())
+        .filter(Boolean);
+
+    const self = await c.env.DB
+        .prepare('SELECT email FROM users WHERE id = ?')
+        .bind(result.userId)
+        .first<{ email: string }>();
+
+    if (!self || !allowedEmails.includes(self.email.toLowerCase())) {
+        return c.json({ error: 'この操作は許可されていません' }, 403);
+    }
+
+    const targetId = parseInt(c.req.param('id'));
+
+    const target = await c.env.DB
+        .prepare('SELECT id FROM users WHERE id = ?')
+        .bind(targetId)
+        .first<{ id: number }>();
+
+    if (!target) {
+        return c.json({ error: 'ユーザーが見つかりません' }, 404);
+    }
+
+    await c.env.DB
+        .prepare('UPDATE users SET totp_secret = NULL, totp_setup_complete = 0 WHERE id = ?')
+        .bind(targetId)
+        .run();
+
+    return c.json({ success: true });
+});
+
 /** Delete a user (admin only) */
 auth.delete('/users/:id', async (c) => {
     const result = await requireAdmin(c);
