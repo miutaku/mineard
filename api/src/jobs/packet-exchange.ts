@@ -25,6 +25,8 @@ import {
 const MAX_GIFT_PER_ISSUE = 9999; // mineo gift limit per issue
 const MIN_GIFT_AMOUNT = 10; // mineo minimum
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function runPacketExchange(env: Env): Promise<void> {
     const db = env.DB;
 
@@ -51,7 +53,8 @@ export async function runPacketExchange(env: Env): Promise<void> {
         return;
     }
 
-    for (const pair of pairs.results) {
+    for (let i = 0; i < pairs.results.length; i++) {
+        const pair = pairs.results[i];
         try {
             await processPair(db, pair, env.ENCRYPTION_KEY, env);
         } catch (err) {
@@ -59,6 +62,7 @@ export async function runPacketExchange(env: Env): Promise<void> {
             console.error(`[PacketExchange] Pair ${pair.source_name} → ${pair.target_name}: ${errMsg}`);
             await insertLog(db, pair.source_account_id, 'failed', `交換処理エラー: ${errMsg}`);
         }
+        if (i < pairs.results.length - 1) await sleep(2000);
     }
 }
 
@@ -148,6 +152,7 @@ async function processPair(
             `ギフト発行: ${chunk}MB → ${pair.target_name}`, issueResult.giftCode, chunk);
 
         remaining -= chunk;
+        if (remaining >= MIN_GIFT_AMOUNT) await sleep(1000);
     }
 
     // Step 4: Target receives all gifts
@@ -195,6 +200,7 @@ async function processPair(
             `返送ギフト発行: ${chunk}MB → ${pair.source_name}`, returnResult.giftCode, chunk);
 
         returnRemaining -= chunk;
+        if (returnRemaining >= MIN_GIFT_AMOUNT) await sleep(1000);
     }
 
     // Step 6: Source receives returned gifts
