@@ -12,6 +12,7 @@
 import type { Account, Env } from '../types';
 import { ensureValidToken } from '../services/token-manager';
 import { declareDevolve } from '../services/mineo-api';
+import { notifyYuzuruneSuccess, notifyYuzuruneFailed } from '../services/discord';
 
 const MAX_RETRIES = 3;
 
@@ -38,6 +39,7 @@ export async function runYuzurune(env: Env): Promise<void> {
         await processAccount(db, account, todayStr, env.ENCRYPTION_KEY, env);
     }
 }
+
 
 async function processAccount(
     db: D1Database,
@@ -73,6 +75,7 @@ async function processAccount(
         const message = `Token refresh failed: ${err instanceof Error ? err.message : String(err)}`;
         console.error(`[Yuzurune] ${displayName}: ${message}`);
         await insertLog(db, account.id, 'failed', message);
+        await notifyYuzuruneFailed(env, displayName, message);
         return;
     }
 
@@ -84,6 +87,7 @@ async function processAccount(
             if (result.resultCode === '00') {
                 console.log(`[Yuzurune] ${displayName}: Declaration succeeded (attempt ${attempt})`);
                 await insertLog(db, account.id, 'success', `宣言完了 (attempt ${attempt})`);
+                await notifyYuzuruneSuccess(env, displayName, `宣言完了 (attempt ${attempt})`);
                 return;
             }
 
@@ -98,14 +102,18 @@ async function processAccount(
             console.warn(`[Yuzurune] ${displayName}: Attempt ${attempt} failed: ${msg}`);
 
             if (attempt === MAX_RETRIES) {
-                await insertLog(db, account.id, 'failed', `${MAX_RETRIES}回リトライ後失敗: ${msg}`);
+                const failMessage = `${MAX_RETRIES}回リトライ後失敗: ${msg}`;
+                await insertLog(db, account.id, 'failed', failMessage);
+                await notifyYuzuruneFailed(env, displayName, failMessage);
             }
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
             console.error(`[Yuzurune] ${displayName}: Attempt ${attempt} error: ${errMsg}`);
 
             if (attempt === MAX_RETRIES) {
-                await insertLog(db, account.id, 'failed', `${MAX_RETRIES}回リトライ後エラー: ${errMsg}`);
+                const failMessage = `${MAX_RETRIES}回リトライ後エラー: ${errMsg}`;
+                await insertLog(db, account.id, 'failed', failMessage);
+                await notifyYuzuruneFailed(env, displayName, failMessage);
             }
         }
     }
