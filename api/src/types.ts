@@ -11,6 +11,7 @@ export interface Env {
     MINEO_BASE_URL: string;
     MINEO_OIDC_TOKEN_URL: string;
     MINEO_OIDC_CLIENT_ID: string;
+    DISCORD_WEBHOOK_URL?: string;
 }
 
 /** Hono app-level type including per-request variables */

@@ -21,6 +21,7 @@ import {
     issueGift,
     changeGift,
 } from '../services/mineo-api';
+import { notifyPacketExchangeResult, type ExchangeResult } from '../services/discord';
 
 const MAX_GIFT_PER_ISSUE = 9999; // mineo gift limit per issue
 const MIN_GIFT_AMOUNT = 10; // mineo minimum
@@ -53,17 +54,28 @@ export async function runPacketExchange(env: Env): Promise<void> {
         return;
     }
 
+    const results: ExchangeResult[] = [];
+
     for (let i = 0; i < pairs.results.length; i++) {
         const pair = pairs.results[i];
         try {
-            await processPair(db, pair, env.ENCRYPTION_KEY, env);
+            const result = await processPair(db, pair, env.ENCRYPTION_KEY, env);
+            results.push(result);
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
             console.error(`[PacketExchange] Pair ${pair.source_name} → ${pair.target_name}: ${errMsg}`);
             await insertLog(db, pair.source_account_id, 'failed', `交換処理エラー: ${errMsg}`);
+            results.push({
+                sourceName: pair.source_name,
+                targetName: pair.target_name,
+                status: 'failed',
+                message: errMsg,
+            });
         }
         if (i < pairs.results.length - 1) await sleep(2000);
     }
+
+    await notifyPacketExchangeResult(env, results);
 }
 
 async function processPair(
@@ -76,7 +88,7 @@ async function processPair(
     },
     encKey: string,
     env: Env
-): Promise<void> {
+): Promise<ExchangeResult> {
     const log = (msg: string) =>
         console.log(`[PacketExchange] ${pair.source_name} → ${pair.target_name}: ${msg}`);
 
@@ -108,7 +120,7 @@ async function processPair(
     if (forwardRemaining < MIN_GIFT_AMOUNT) {
         log(`繰越パケットが${MIN_GIFT_AMOUNT}MB未満のためスキップ`);
         await insertLog(db, pair.source_account_id, 'skipped', `繰越パケット${forwardRemaining}MBのためスキップ`);
-        return;
+        return { sourceName: pair.source_name, targetName: pair.target_name, status: 'skipped', message: `繰越パケット${forwardRemaining}MB` };
     }
 
     // Step 2: Check gift-able capacity
@@ -121,7 +133,7 @@ async function processPair(
     if (giftableAmount < MIN_GIFT_AMOUNT) {
         log(`ギフト可能容量${giftableAmount}MB未満のためスキップ`);
         await insertLog(db, pair.source_account_id, 'skipped', `ギフト可能容量不足: ${giftableAmount}MB`);
-        return;
+        return { sourceName: pair.source_name, targetName: pair.target_name, status: 'skipped', message: `ギフト可能容量不足: ${giftableAmount}MB` };
     }
 
     log(`ギフト対象: ${giftableAmount}MB`);
@@ -224,6 +236,7 @@ async function processPair(
     }
 
     log(`交換完了！合計: ${giftableAmount}MB`);
+    return { sourceName: pair.source_name, targetName: pair.target_name, status: 'success', amount: giftableAmount };
 }
 
 async function insertLog(

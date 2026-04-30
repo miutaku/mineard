@@ -51,6 +51,9 @@ API ディレクトリに `.dev.vars` ファイルを作成し、シークレッ
 - `ENCRYPTION_KEY`: 保存するトークンの暗号化キー (32バイト以上のランダムな文字列推奨)
 - `AUTH_SECRET`: JWT署名用シークレット (十分な長さのランダムな文字列推奨)
 
+**任意のシークレット**
+- `DISCORD_WEBHOOK_URL`: Discord通知用 Incoming Webhook URL（設定するとCronジョブの実行結果をDiscordに通知）
+
 **その他の環境変数 (`wrangler.toml` 経由)**
 - `FRONTEND_URL`: CORSのためのフロントエンドURL（例: `https://mineard-web.pages.dev`）
 - `MINEO_APP_ID`: MineoアプリのID（例: `jp.mineo.app`）
@@ -70,6 +73,7 @@ npx wrangler d1 execute mineard --file=api/src/db/schema.sql
 cd api
 npx wrangler secret put ENCRYPTION_KEY
 npx wrangler secret put AUTH_SECRET
+npx wrangler secret put DISCORD_WEBHOOK_URL  # 任意
 
 # Worker のデプロイ
 cd api
