@@ -37,6 +37,8 @@ accounts.get('/', async (c) => {
         display_name: a.display_name,
         cust_id: a.cust_id,
         yuzurune_enabled: !!a.yuzurune_enabled,
+        packet_threshold: a.packet_threshold ?? null,
+        packet_alert_enabled: !!a.packet_alert_enabled,
         token_valid: a.token_expires_at !== null,
         token_expires_at: a.token_expires_at,
         created_at: a.created_at,
@@ -77,6 +79,8 @@ accounts.get('/:id', async (c) => {
         display_name: account.display_name,
         cust_id: account.cust_id,
         yuzurune_enabled: !!account.yuzurune_enabled,
+        packet_threshold: account.packet_threshold ?? null,
+        packet_alert_enabled: !!account.packet_alert_enabled,
         token_valid: account.token_expires_at ? new Date(account.token_expires_at) > new Date() : false,
         token_expires_at: account.token_expires_at,
         created_at: account.created_at,
@@ -98,8 +102,8 @@ accounts.post('/', async (c) => {
 
     const result = await c.env.DB
         .prepare(
-            `INSERT INTO accounts (user_id, display_name, cust_id, refresh_token, yuzurune_enabled)
-       VALUES (?, ?, ?, ?, ?)`
+            `INSERT INTO accounts (user_id, display_name, cust_id, refresh_token, yuzurune_enabled, packet_alert_enabled)
+       VALUES (?, ?, ?, ?, ?, 0)`
         )
         .bind(
             userId,
@@ -127,7 +131,7 @@ accounts.put('/:id', async (c) => {
     if (!account) return c.json({ error: 'Not found' }, 404);
 
     const updates: string[] = [];
-    const values: (string | number)[] = [];
+    const values: (string | number | null)[] = [];
 
     if (body.display_name !== undefined) {
         updates.push('display_name = ?');
@@ -145,6 +149,16 @@ accounts.put('/:id', async (c) => {
     if (body.yuzurune_enabled !== undefined) {
         updates.push('yuzurune_enabled = ?');
         values.push(body.yuzurune_enabled ? 1 : 0);
+    }
+
+    if (body.packet_threshold !== undefined) {
+        updates.push('packet_threshold = ?');
+        values.push(body.packet_threshold ?? null);
+    }
+
+    if (body.packet_alert_enabled !== undefined) {
+        updates.push('packet_alert_enabled = ?');
+        values.push(body.packet_alert_enabled ? 1 : 0);
     }
 
     if (updates.length === 0) {

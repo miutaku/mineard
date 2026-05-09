@@ -11,6 +11,7 @@ interface DiscordEmbed {
 
 interface DiscordWebhookPayload {
     username?: string;
+    content?: string;
     embeds?: DiscordEmbed[];
 }
 
@@ -58,6 +59,39 @@ export async function notifyYuzuruneFailed(env: Env, accountName: string, messag
             description: `**${accountName}** のゆずるね。宣言に失敗しました`,
             color: 0xff4444,
             fields: [{ name: 'エラー内容', value: message }],
+            timestamp: new Date().toISOString(),
+        }],
+    });
+}
+
+// パケット残量低下アラート通知
+export interface PacketAlertItem {
+    accountName: string;
+    remainingMb: number;
+    thresholdMb: number;
+    discordMentionId: string | null;
+}
+
+export async function notifyPacketLowAlert(env: Env, alerts: PacketAlertItem[]): Promise<void> {
+    if (!env.DISCORD_WEBHOOK_URL || alerts.length === 0) return;
+
+    const mentionIds = [...new Set(alerts.map((a) => a.discordMentionId).filter(Boolean))];
+    const mentionStr = mentionIds.map((id) => `<@${id}>`).join(' ');
+
+    const fields = alerts.map((a) => ({
+        name: `📉 ${a.accountName}`,
+        value: `残量: **${a.remainingMb.toLocaleString()} MB** （閾値: ${a.thresholdMb.toLocaleString()} MB）`,
+        inline: false,
+    }));
+
+    await sendWebhook(env.DISCORD_WEBHOOK_URL, {
+        username: 'Mineard',
+        ...(mentionStr ? { content: `${mentionStr} パケット残量が閾値を下回りました` } : {}),
+        embeds: [{
+            title: ':warning: パケット残量アラート',
+            description: `以下のアカウントで残量が閾値を下回っています`,
+            color: 0xff8800,
+            fields,
             timestamp: new Date().toISOString(),
         }],
     });

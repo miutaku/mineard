@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   totp_secret TEXT,
   totp_setup_complete INTEGER NOT NULL DEFAULT 0,
   is_admin INTEGER NOT NULL DEFAULT 0,
+  discord_mention_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -18,6 +19,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   id_token TEXT,
   token_expires_at TEXT,
   yuzurune_enabled INTEGER NOT NULL DEFAULT 1,
+  packet_threshold INTEGER,
+  packet_alert_enabled INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
