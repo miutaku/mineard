@@ -35,10 +35,11 @@ async function sendWebhook(webhookUrl: string, payload: DiscordWebhookPayload): 
 }
 
 // ゆずるね。成功通知
-export async function notifyYuzuruneSuccess(env: Env, accountName: string, message: string): Promise<void> {
+export async function notifyYuzuruneSuccess(env: Env, accountName: string, message: string, discordMentionId?: string | null): Promise<void> {
     if (!env.DISCORD_WEBHOOK_URL) return;
     await sendWebhook(env.DISCORD_WEBHOOK_URL, {
         username: 'Mineard',
+        ...(discordMentionId ? { content: `<@${discordMentionId}>` } : {}),
         embeds: [{
             title: ':white_check_mark: ゆずるね。宣言 完了',
             description: `**${accountName}** のゆずるね。宣言が完了しました`,
@@ -50,10 +51,11 @@ export async function notifyYuzuruneSuccess(env: Env, accountName: string, messa
 }
 
 // ゆずるね。失敗通知（MAX_RETRIESを超えた場合）
-export async function notifyYuzuruneFailed(env: Env, accountName: string, message: string): Promise<void> {
+export async function notifyYuzuruneFailed(env: Env, accountName: string, message: string, discordMentionId?: string | null): Promise<void> {
     if (!env.DISCORD_WEBHOOK_URL) return;
     await sendWebhook(env.DISCORD_WEBHOOK_URL, {
         username: 'Mineard',
+        ...(discordMentionId ? { content: `<@${discordMentionId}>` } : {}),
         embeds: [{
             title: ':warning: ゆずるね。宣言 失敗',
             description: `**${accountName}** のゆずるね。宣言に失敗しました`,
