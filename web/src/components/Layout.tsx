@@ -22,6 +22,7 @@ import {
     IconMoon,
     IconLogout,
     IconInfinity,
+    IconSettings,
 } from '@tabler/icons-react';
 import { api } from '../lib/api-client';
 
@@ -30,6 +31,7 @@ const navItems = [
     { label: 'mineoアカウント', icon: IconDeviceMobile, path: '/accounts' },
     { label: 'ギフトペア', icon: IconArrowsExchange, path: '/gift-pairs' },
     { label: 'ログ', icon: IconFileText, path: '/logs' },
+    { label: '設定', icon: IconSettings, path: '/settings' },
 ];
 
 const adminNavItems = [
