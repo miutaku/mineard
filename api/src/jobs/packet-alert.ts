@@ -38,6 +38,15 @@ export async function runPacketAlert(env: Env): Promise<void> {
     const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const todayStr = jstDate.toISOString().split('T')[0];
 
+    // 通知済みレコードを一括取得して Map に変換（N+1 回避）
+    const configKeys = rows.results.map((a) => `packet_alert_last_notified_${a.id}`);
+    const placeholders = configKeys.map(() => '?').join(',');
+    const notifiedRows = await db
+        .prepare(`SELECT key, value FROM app_config WHERE key IN (${placeholders})`)
+        .bind(...configKeys)
+        .all<{ key: string; value: string }>();
+    const notifiedMap = new Map(notifiedRows.results?.map((r) => [r.key, r.value]) ?? []);
+
     const alerts: PacketAlertItem[] = [];
 
     for (const account of rows.results) {
@@ -45,12 +54,7 @@ export async function runPacketAlert(env: Env): Promise<void> {
         const configKey = `packet_alert_last_notified_${account.id}`;
 
         // 本日すでに通知済みかチェック
-        const lastNotified = await db
-            .prepare('SELECT value FROM app_config WHERE key = ?')
-            .bind(configKey)
-            .first<{ value: string }>();
-
-        if (lastNotified?.value === todayStr) {
+        if (notifiedMap.get(configKey) === todayStr) {
             console.log(`[PacketAlert] ${account.display_name}: already notified today, skipping`);
             continue;
         }
