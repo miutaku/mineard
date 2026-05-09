@@ -30,6 +30,7 @@ export interface User {
     totp_secret: string | null;
     totp_setup_complete: number;
     is_admin: number;
+    discord_mention_id: string | null;
     created_at: string;
 }
 
@@ -42,6 +43,8 @@ export interface Account {
     id_token: string | null; // encrypted
     token_expires_at: string | null;
     yuzurune_enabled: number;
+    packet_threshold: number | null;
+    packet_alert_enabled: number;
     created_at: string;
 }
 
@@ -151,6 +154,8 @@ export interface UpdateAccountRequest {
     display_name?: string;
     refresh_token?: string;
     yuzurune_enabled?: boolean;
+    packet_threshold?: number | null;
+    packet_alert_enabled?: boolean;
 }
 
 export interface CreateGiftPairRequest {

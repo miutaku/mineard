@@ -14,8 +14,10 @@ import giftPairRoutes from './routes/gift-pairs';
 import logRoutes from './routes/logs';
 import dashboardRoutes from './routes/dashboard';
 import mineoLoginRoutes from './routes/mineo-login';
+import profileRoutes from './routes/profile';
 import { runYuzurune } from './jobs/yuzurune';
 import { runPacketExchange } from './jobs/packet-exchange';
+import { runPacketAlert } from './jobs/packet-alert';
 
 const app = new Hono<HonoEnv>();
 
@@ -42,6 +44,7 @@ app.route('/api/gift-pairs', giftPairRoutes);
 app.route('/api/logs', logRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/mineo-login', mineoLoginRoutes);
+app.route('/api/profile', profileRoutes);
 
 // Health check
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -60,6 +63,10 @@ export default {
             case '0 0 26 * *':
                 // パケットギフト交換 — 毎月26日 09:00 JST
                 ctx.waitUntil(runPacketExchange(env));
+                break;
+            case '*/10 * * * *':
+                // パケット残量アラート — 10分ごと
+                ctx.waitUntil(runPacketAlert(env));
                 break;
             default:
                 console.warn(`[Cron] Unknown cron expression: ${event.cron}`);
