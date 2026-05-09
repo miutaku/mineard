@@ -22,6 +22,7 @@ import {
     IconMoon,
     IconLogout,
     IconInfinity,
+    IconSettings,
 } from '@tabler/icons-react';
 import { api } from '../lib/api-client';
 
@@ -30,6 +31,7 @@ const navItems = [
     { label: 'mineoアカウント', icon: IconDeviceMobile, path: '/accounts' },
     { label: 'ギフトペア', icon: IconArrowsExchange, path: '/gift-pairs' },
     { label: 'ログ', icon: IconFileText, path: '/logs' },
+    { label: '設定', icon: IconSettings, path: '/settings' },
 ];
 
 const adminNavItems = [
@@ -121,7 +123,7 @@ export default function Layout({ isAdmin = false, userEmail = '' }: { isAdmin?: 
                 </AppShell.Section>
                 <AppShell.Section>
                     <Text size="xs" c="dimmed" ta="center" py="xs">
-                        Mineard v1.0.0
+                        Mineard v1.1.0
                     </Text>
                 </AppShell.Section>
             </AppShell.Navbar>

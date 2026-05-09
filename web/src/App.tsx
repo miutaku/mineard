@@ -11,6 +11,7 @@ import AddAccount from './pages/AddAccount';
 import GiftPairs from './pages/GiftPairs';
 import Logs from './pages/Logs';
 import Users from './pages/Users';
+import Settings from './pages/Settings';
 
 interface AuthStatus {
     authenticated: boolean;
@@ -89,6 +90,7 @@ function App() {
                     <Route path="/accounts/add" element={<AddAccount />} />
                     <Route path="/gift-pairs" element={<GiftPairs />} />
                     <Route path="/logs" element={<Logs />} />
+                    <Route path="/settings" element={<Settings />} />
                     {isAdmin && <Route path="/users" element={<Users />} />}
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

@@ -9,7 +9,7 @@
  *   4. 結果をjob_logsに記録
  */
 
-import type { Account, Env } from '../types';
+import type { Account, Env, User } from '../types';
 import { ensureValidToken } from '../services/token-manager';
 import { declareDevolve } from '../services/mineo-api';
 import { notifyYuzuruneSuccess, notifyYuzuruneFailed } from '../services/discord';
@@ -19,10 +19,15 @@ const MAX_RETRIES = 3;
 export async function runYuzurune(env: Env): Promise<void> {
     const db = env.DB;
 
-    // Get all enabled accounts
+    // Get all enabled accounts with owner's discord_mention_id
     const accounts = await db
-        .prepare('SELECT * FROM accounts WHERE yuzurune_enabled = 1')
-        .all<Account>();
+        .prepare(
+            `SELECT a.*, u.discord_mention_id
+             FROM accounts a
+             JOIN users u ON a.user_id = u.id
+             WHERE a.yuzurune_enabled = 1`
+        )
+        .all<Account & { discord_mention_id: string | null }>();
 
     if (!accounts.results || accounts.results.length === 0) {
         console.log('[Yuzurune] No enabled accounts found');
@@ -38,17 +43,19 @@ export async function runYuzurune(env: Env): Promise<void> {
     for (const account of accounts.results) {
         await processAccount(db, account, todayStr, env.ENCRYPTION_KEY, env);
     }
+
 }
 
 
 async function processAccount(
     db: D1Database,
-    account: Account,
+    account: Account & { discord_mention_id: string | null },
     todayStr: string,
     encKey: string,
     env: Env
 ): Promise<void> {
     const displayName = account.display_name;
+    const mentionId = account.yuzurune_notify_enabled ? account.discord_mention_id : null;
 
     // Check if already succeeded today
     const existingLog = await db
@@ -75,7 +82,7 @@ async function processAccount(
         const message = `Token refresh failed: ${err instanceof Error ? err.message : String(err)}`;
         console.error(`[Yuzurune] ${displayName}: ${message}`);
         await insertLog(db, account.id, 'failed', message);
-        await notifyYuzuruneFailed(env, displayName, message);
+        await notifyYuzuruneFailed(env, displayName, message, mentionId);
         return;
     }
 
@@ -87,7 +94,7 @@ async function processAccount(
             if (result.resultCode === '00') {
                 console.log(`[Yuzurune] ${displayName}: Declaration succeeded (attempt ${attempt})`);
                 await insertLog(db, account.id, 'success', `宣言完了 (attempt ${attempt})`);
-                await notifyYuzuruneSuccess(env, displayName, `宣言完了 (attempt ${attempt})`);
+                await notifyYuzuruneSuccess(env, displayName, `宣言完了 (attempt ${attempt})`, mentionId);
                 return;
             }
 
@@ -104,7 +111,7 @@ async function processAccount(
             if (attempt === MAX_RETRIES) {
                 const failMessage = `${MAX_RETRIES}回リトライ後失敗: ${msg}`;
                 await insertLog(db, account.id, 'failed', failMessage);
-                await notifyYuzuruneFailed(env, displayName, failMessage);
+                await notifyYuzuruneFailed(env, displayName, failMessage, mentionId);
             }
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
@@ -113,7 +120,7 @@ async function processAccount(
             if (attempt === MAX_RETRIES) {
                 const failMessage = `${MAX_RETRIES}回リトライ後エラー: ${errMsg}`;
                 await insertLog(db, account.id, 'failed', failMessage);
-                await notifyYuzuruneFailed(env, displayName, failMessage);
+                await notifyYuzuruneFailed(env, displayName, failMessage, mentionId);
             }
         }
     }
