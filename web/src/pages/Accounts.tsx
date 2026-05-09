@@ -8,6 +8,7 @@ import {
     Modal,
     TextInput,
     Textarea,
+    NumberInput,
     Switch,
     Stack,
     Badge,
@@ -35,6 +36,8 @@ interface AccountSummary {
     display_name: string;
     cust_id: string;
     yuzurune_enabled: boolean;
+    packet_threshold: number | null;
+    packet_alert_enabled: boolean;
     token_valid: boolean;
     token_expires_at: string | null;
     created_at: string;
@@ -50,6 +53,8 @@ export default function Accounts() {
     const [displayName, setDisplayName] = useState('');
     const [refreshToken, setRefreshToken] = useState('');
     const [yuzuruneEnabled, setYuzuruneEnabled] = useState(true);
+    const [packetThreshold, setPacketThreshold] = useState<number | ''>('');
+    const [packetAlertEnabled, setPacketAlertEnabled] = useState(false);
     const [saving, setSaving] = useState(false);
 
     function openEdit(account: AccountSummary) {
@@ -57,6 +62,8 @@ export default function Accounts() {
         setDisplayName(account.display_name);
         setRefreshToken('');
         setYuzuruneEnabled(account.yuzurune_enabled);
+        setPacketThreshold(account.packet_threshold ?? '');
+        setPacketAlertEnabled(account.packet_alert_enabled);
         open();
     }
 
@@ -64,7 +71,12 @@ export default function Accounts() {
         if (!editAccount) return;
         setSaving(true);
         try {
-            const body: Record<string, unknown> = { display_name: displayName, yuzurune_enabled: yuzuruneEnabled };
+            const body: Record<string, unknown> = {
+                display_name: displayName,
+                yuzurune_enabled: yuzuruneEnabled,
+                packet_threshold: packetThreshold === '' ? null : packetThreshold,
+                packet_alert_enabled: packetAlertEnabled,
+            };
             if (refreshToken) body.refresh_token = refreshToken;
             await api.put(`/accounts/${editAccount.id}`, body);
             notifications.show({ title: '更新完了', message: `${displayName} を更新しました`, color: 'green' });
@@ -121,6 +133,7 @@ export default function Accounts() {
                                 <Table.Tr>
                                     <Table.Th>表示名</Table.Th>
                                     <Table.Th>ゆずるね</Table.Th>
+                                    <Table.Th>残量アラート閾値</Table.Th>
                                     <Table.Th>トークン</Table.Th>
                                     <Table.Th>操作</Table.Th>
                                 </Table.Tr>
@@ -139,6 +152,22 @@ export default function Accounts() {
                                             >
                                                 {account.yuzurune_enabled ? 'ON' : 'OFF'}
                                             </Badge>
+                                        </Table.Td>
+                                        <Table.Td>
+                                            {account.packet_threshold !== null ? (
+                                                <Group gap="xs">
+                                                    <Text size="sm">{account.packet_threshold.toLocaleString()} MB</Text>
+                                                    <Badge
+                                                        color={account.packet_alert_enabled ? 'orange' : 'gray'}
+                                                        variant="light"
+                                                        size="xs"
+                                                    >
+                                                        {account.packet_alert_enabled ? '通知ON' : '通知OFF'}
+                                                    </Badge>
+                                                </Group>
+                                            ) : (
+                                                <Text size="sm" c="dimmed">未設定</Text>
+                                            )}
                                         </Table.Td>
                                         <Table.Td>
                                             <Badge
@@ -207,6 +236,23 @@ export default function Accounts() {
                         label="ゆずるね。自動宣言を有効化"
                         checked={yuzuruneEnabled}
                         onChange={(e) => setYuzuruneEnabled(e.currentTarget.checked)}
+                    />
+                    <NumberInput
+                        label="パケット残量通知閾値 (MB)"
+                        placeholder="例: 5120 (5GB)"
+                        value={packetThreshold}
+                        onChange={(v) => setPacketThreshold(v === '' ? '' : Number(v))}
+                        min={1}
+                        step={100}
+                        description="総残量（基本＋追加＋繰越＋ギフト）がこの値 (MB) を下回ると Discord へ通知されます"
+                        allowDecimal={false}
+                    />
+                    <Switch
+                        label="パケット残量アラートを有効化"
+                        checked={packetAlertEnabled}
+                        onChange={(e) => setPacketAlertEnabled(e.currentTarget.checked)}
+                        disabled={packetThreshold === ''}
+                        description={packetThreshold === '' ? '先に閾値を設定してください' : '10分ごとにチェックし、閾値を下回ると当日1回通知します'}
                     />
                     <Group justify="flex-end" mt="md">
                         <Button variant="default" onClick={close}>
