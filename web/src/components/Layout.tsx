@@ -123,7 +123,7 @@ export default function Layout({ isAdmin = false, userEmail = '' }: { isAdmin?: 
                 </AppShell.Section>
                 <AppShell.Section>
                     <Text size="xs" c="dimmed" ta="center" py="xs">
-                        Mineard v1.0.0
+                        Mineard v1.1.0
                     </Text>
                 </AppShell.Section>
             </AppShell.Navbar>

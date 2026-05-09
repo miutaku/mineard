@@ -36,6 +36,7 @@ interface AccountSummary {
     display_name: string;
     cust_id: string;
     yuzurune_enabled: boolean;
+    yuzurune_notify_enabled: boolean;
     packet_threshold: number | null;
     packet_alert_enabled: boolean;
     token_valid: boolean;
@@ -54,6 +55,7 @@ export default function Accounts() {
     const [refreshToken, setRefreshToken] = useState('');
     const [yuzuruneEnabled, setYuzuruneEnabled] = useState(true);
     const [packetThreshold, setPacketThreshold] = useState<number | ''>('');
+    const [yuzuruneNotifyEnabled, setYuzuruneNotifyEnabled] = useState(true);
     const [packetAlertEnabled, setPacketAlertEnabled] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -62,6 +64,7 @@ export default function Accounts() {
         setDisplayName(account.display_name);
         setRefreshToken('');
         setYuzuruneEnabled(account.yuzurune_enabled);
+        setYuzuruneNotifyEnabled(account.yuzurune_notify_enabled);
         setPacketThreshold(account.packet_threshold ?? '');
         setPacketAlertEnabled(account.packet_alert_enabled);
         open();
@@ -74,6 +77,7 @@ export default function Accounts() {
             const body: Record<string, unknown> = {
                 display_name: displayName,
                 yuzurune_enabled: yuzuruneEnabled,
+                yuzurune_notify_enabled: yuzuruneNotifyEnabled,
                 packet_threshold: packetThreshold === '' ? null : packetThreshold,
                 packet_alert_enabled: packetAlertEnabled,
             };
@@ -145,13 +149,24 @@ export default function Accounts() {
                                             <Text fw={500}>{account.display_name}</Text>
                                         </Table.Td>
                                         <Table.Td>
-                                            <Badge
-                                                color={account.yuzurune_enabled ? 'teal' : 'gray'}
-                                                variant="light"
-                                                size="sm"
-                                            >
-                                                {account.yuzurune_enabled ? 'ON' : 'OFF'}
-                                            </Badge>
+                                            <Group gap="xs">
+                                                <Badge
+                                                    color={account.yuzurune_enabled ? 'teal' : 'gray'}
+                                                    variant="light"
+                                                    size="sm"
+                                                >
+                                                    {account.yuzurune_enabled ? 'ON' : 'OFF'}
+                                                </Badge>
+                                                {account.yuzurune_enabled && (
+                                                    <Badge
+                                                        color={account.yuzurune_notify_enabled ? 'blue' : 'gray'}
+                                                        variant="light"
+                                                        size="xs"
+                                                    >
+                                                        {account.yuzurune_notify_enabled ? '通知ON' : '通知OFF'}
+                                                    </Badge>
+                                                )}
+                                            </Group>
                                         </Table.Td>
                                         <Table.Td>
                                             {account.packet_threshold !== null ? (
@@ -236,6 +251,12 @@ export default function Accounts() {
                         label="ゆずるね。自動宣言を有効化"
                         checked={yuzuruneEnabled}
                         onChange={(e) => setYuzuruneEnabled(e.currentTarget.checked)}
+                    />
+                    <Switch
+                        label="ゆずるね。結果を Discord に通知"
+                        checked={yuzuruneNotifyEnabled}
+                        onChange={(e) => setYuzuruneNotifyEnabled(e.currentTarget.checked)}
+                        description="成功・失敗時に Discord へ通知します（設定ページのユーザーIDがあればメンション付き）"
                     />
                     <NumberInput
                         label="パケット残量通知閾値 (MB)"
