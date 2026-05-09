@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   id_token TEXT,
   token_expires_at TEXT,
   yuzurune_enabled INTEGER NOT NULL DEFAULT 1,
+  yuzurune_notify_enabled INTEGER DEFAULT 1,
   packet_threshold INTEGER,
   packet_alert_enabled INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

@@ -37,6 +37,7 @@ accounts.get('/', async (c) => {
         display_name: a.display_name,
         cust_id: a.cust_id,
         yuzurune_enabled: !!a.yuzurune_enabled,
+        yuzurune_notify_enabled: a.yuzurune_notify_enabled !== 0,
         packet_threshold: a.packet_threshold ?? null,
         packet_alert_enabled: !!a.packet_alert_enabled,
         token_valid: a.token_expires_at !== null,
@@ -79,6 +80,7 @@ accounts.get('/:id', async (c) => {
         display_name: account.display_name,
         cust_id: account.cust_id,
         yuzurune_enabled: !!account.yuzurune_enabled,
+        yuzurune_notify_enabled: account.yuzurune_notify_enabled !== 0,
         packet_threshold: account.packet_threshold ?? null,
         packet_alert_enabled: !!account.packet_alert_enabled,
         token_valid: account.token_expires_at ? new Date(account.token_expires_at) > new Date() : false,
@@ -149,6 +151,11 @@ accounts.put('/:id', async (c) => {
     if (body.yuzurune_enabled !== undefined) {
         updates.push('yuzurune_enabled = ?');
         values.push(body.yuzurune_enabled ? 1 : 0);
+    }
+
+    if (body.yuzurune_notify_enabled !== undefined) {
+        updates.push('yuzurune_notify_enabled = ?');
+        values.push(body.yuzurune_notify_enabled ? 1 : 0);
     }
 
     if (body.packet_threshold !== undefined) {
