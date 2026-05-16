@@ -26,7 +26,7 @@ export async function runPacketAlert(env: Env): Promise<void> {
              WHERE a.packet_threshold IS NOT NULL
                AND a.packet_alert_enabled = 1`
         )
-        .all<Account & { discord_mention_id: string | null }>();
+        .all<Account & { discord_mention_id: string | null; packet_alert_mention_enabled: number }>();
 
     if (!rows.results || rows.results.length === 0) {
         console.log('[PacketAlert] No accounts with packet_threshold set');
@@ -89,6 +89,7 @@ export async function runPacketAlert(env: Env): Promise<void> {
                 remainingMb,
                 thresholdMb: threshold,
                 discordMentionId: account.discord_mention_id,
+                mentionEnabled: !!account.packet_alert_mention_enabled,
             });
 
             // 通知済みとして記録

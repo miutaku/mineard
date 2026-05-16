@@ -44,8 +44,10 @@ export interface Account {
     token_expires_at: string | null;
     yuzurune_enabled: number;
     yuzurune_notify_enabled: number;
+    yuzurune_mention_level: string | null;
     packet_threshold: number | null;
     packet_alert_enabled: number;
+    packet_alert_mention_enabled: number;
     created_at: string;
 }
 
@@ -156,8 +158,10 @@ export interface UpdateAccountRequest {
     refresh_token?: string;
     yuzurune_enabled?: boolean;
     yuzurune_notify_enabled?: boolean;
+    yuzurune_mention_level?: string;
     packet_threshold?: number | null;
     packet_alert_enabled?: boolean;
+    packet_alert_mention_enabled?: boolean;
 }
 
 export interface CreateGiftPairRequest {

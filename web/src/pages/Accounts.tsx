@@ -10,6 +10,7 @@ import {
     Textarea,
     NumberInput,
     Switch,
+    Select,
     Stack,
     Badge,
     ActionIcon,
@@ -17,6 +18,7 @@ import {
     Text,
     Alert,
     Skeleton,
+    Divider,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -37,12 +39,20 @@ interface AccountSummary {
     cust_id: string;
     yuzurune_enabled: boolean;
     yuzurune_notify_enabled: boolean;
+    yuzurune_mention_level: string;
     packet_threshold: number | null;
     packet_alert_enabled: boolean;
+    packet_alert_mention_enabled: boolean;
     token_valid: boolean;
     token_expires_at: string | null;
     created_at: string;
 }
+
+const MENTION_LEVEL_LABELS: Record<string, string> = {
+    none: 'なし',
+    failure_only: '失敗時のみ',
+    always: '常に',
+};
 
 export default function Accounts() {
     const navigate = useNavigate();
@@ -54,9 +64,11 @@ export default function Accounts() {
     const [displayName, setDisplayName] = useState('');
     const [refreshToken, setRefreshToken] = useState('');
     const [yuzuruneEnabled, setYuzuruneEnabled] = useState(true);
-    const [packetThreshold, setPacketThreshold] = useState<number | ''>('');
     const [yuzuruneNotifyEnabled, setYuzuruneNotifyEnabled] = useState(true);
+    const [yuzuruneMentionLevel, setYuzuruneMentionLevel] = useState<string>('failure_only');
+    const [packetThreshold, setPacketThreshold] = useState<number | ''>('');
     const [packetAlertEnabled, setPacketAlertEnabled] = useState(false);
+    const [packetAlertMentionEnabled, setPacketAlertMentionEnabled] = useState(true);
     const [saving, setSaving] = useState(false);
 
     function openEdit(account: AccountSummary) {
@@ -65,8 +77,10 @@ export default function Accounts() {
         setRefreshToken('');
         setYuzuruneEnabled(account.yuzurune_enabled);
         setYuzuruneNotifyEnabled(account.yuzurune_notify_enabled);
+        setYuzuruneMentionLevel(account.yuzurune_mention_level ?? 'failure_only');
         setPacketThreshold(account.packet_threshold ?? '');
         setPacketAlertEnabled(account.packet_alert_enabled);
+        setPacketAlertMentionEnabled(account.packet_alert_mention_enabled);
         open();
     }
 
@@ -78,8 +92,10 @@ export default function Accounts() {
                 display_name: displayName,
                 yuzurune_enabled: yuzuruneEnabled,
                 yuzurune_notify_enabled: yuzuruneNotifyEnabled,
+                yuzurune_mention_level: yuzuruneMentionLevel,
                 packet_threshold: packetThreshold === '' ? null : packetThreshold,
                 packet_alert_enabled: packetAlertEnabled,
+                packet_alert_mention_enabled: packetAlertMentionEnabled,
             };
             if (refreshToken) body.refresh_token = refreshToken;
             await api.put(`/accounts/${editAccount.id}`, body);
@@ -157,14 +173,13 @@ export default function Accounts() {
                                                 >
                                                     {account.yuzurune_enabled ? 'ON' : 'OFF'}
                                                 </Badge>
-                                                {account.yuzurune_enabled && (
-                                                    <Badge
-                                                        color={account.yuzurune_notify_enabled ? 'blue' : 'gray'}
-                                                        variant="light"
-                                                        size="xs"
-                                                    >
-                                                        {account.yuzurune_notify_enabled ? '通知ON' : '通知OFF'}
+                                                {account.yuzurune_enabled && account.yuzurune_notify_enabled && (
+                                                    <Badge color="blue" variant="light" size="xs">
+                                                        通知 / メンション:{MENTION_LEVEL_LABELS[account.yuzurune_mention_level] ?? account.yuzurune_mention_level}
                                                     </Badge>
+                                                )}
+                                                {account.yuzurune_enabled && !account.yuzurune_notify_enabled && (
+                                                    <Badge color="gray" variant="light" size="xs">通知OFF</Badge>
                                                 )}
                                             </Group>
                                         </Table.Td>
@@ -172,13 +187,13 @@ export default function Accounts() {
                                             {account.packet_threshold !== null ? (
                                                 <Group gap="xs">
                                                     <Text size="sm">{account.packet_threshold.toLocaleString()} MB</Text>
-                                                    <Badge
-                                                        color={account.packet_alert_enabled ? 'orange' : 'gray'}
-                                                        variant="light"
-                                                        size="xs"
-                                                    >
-                                                        {account.packet_alert_enabled ? '通知ON' : '通知OFF'}
-                                                    </Badge>
+                                                    {account.packet_alert_enabled ? (
+                                                        <Badge color="orange" variant="light" size="xs">
+                                                            通知ON / メンション:{account.packet_alert_mention_enabled ? 'あり' : 'なし'}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge color="gray" variant="light" size="xs">通知OFF</Badge>
+                                                    )}
                                                 </Group>
                                             ) : (
                                                 <Text size="sm" c="dimmed">未設定</Text>
@@ -247,34 +262,61 @@ export default function Accounts() {
                         minRows={3}
                         description="OIDCで取得したrefresh_token"
                     />
+
+                    <Divider label="ゆずるね。設定" labelPosition="left" />
+
                     <Switch
-                        label="ゆずるね。自動宣言を有効化"
+                        label="自動宣言を有効化"
                         checked={yuzuruneEnabled}
                         onChange={(e) => setYuzuruneEnabled(e.currentTarget.checked)}
                     />
                     <Switch
-                        label="ゆずるね。結果を Discord に通知"
+                        label="Discord に通知"
                         checked={yuzuruneNotifyEnabled}
                         onChange={(e) => setYuzuruneNotifyEnabled(e.currentTarget.checked)}
-                        description="成功・失敗時に Discord へ通知します（設定ページのユーザーIDがあればメンション付き）"
+                        disabled={!yuzuruneEnabled}
+                        description="成功・失敗時に Discord へ通知します"
                     />
+                    <Select
+                        label="メンション通知"
+                        description="設定ページのDiscord IDが必要です"
+                        value={yuzuruneMentionLevel}
+                        onChange={(v) => setYuzuruneMentionLevel(v ?? 'failure_only')}
+                        disabled={!yuzuruneEnabled || !yuzuruneNotifyEnabled}
+                        data={[
+                            { value: 'none', label: 'なし' },
+                            { value: 'failure_only', label: '失敗時のみ' },
+                            { value: 'always', label: '常にメンション' },
+                        ]}
+                    />
+
+                    <Divider label="パケット残量アラート設定" labelPosition="left" />
+
                     <NumberInput
-                        label="パケット残量通知閾値 (MB)"
+                        label="残量通知閾値 (MB)"
                         placeholder="例: 5120 (5GB)"
                         value={packetThreshold}
                         onChange={(v) => setPacketThreshold(v === '' ? '' : Number(v))}
                         min={1}
                         step={100}
-                        description="総残量（基本＋追加＋繰越＋ギフト）がこの値 (MB) を下回ると Discord へ通知されます"
+                        description="総残量（基本＋追加＋繰越＋ギフト）がこの値を下回ると通知されます"
                         allowDecimal={false}
                     />
                     <Switch
-                        label="パケット残量アラートを有効化"
+                        label="アラートを有効化"
                         checked={packetAlertEnabled}
                         onChange={(e) => setPacketAlertEnabled(e.currentTarget.checked)}
                         disabled={packetThreshold === ''}
                         description={packetThreshold === '' ? '先に閾値を設定してください' : '10分ごとにチェックし、閾値を下回ると当日1回通知します'}
                     />
+                    <Switch
+                        label="メンション通知"
+                        checked={packetAlertMentionEnabled}
+                        onChange={(e) => setPacketAlertMentionEnabled(e.currentTarget.checked)}
+                        disabled={!packetAlertEnabled || packetThreshold === ''}
+                        description="設定ページのDiscord IDがあればメンション付きで通知します"
+                    />
+
                     <Group justify="flex-end" mt="md">
                         <Button variant="default" onClick={close}>
                             キャンセル

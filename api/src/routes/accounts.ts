@@ -38,8 +38,10 @@ accounts.get('/', async (c) => {
         cust_id: a.cust_id,
         yuzurune_enabled: !!a.yuzurune_enabled,
         yuzurune_notify_enabled: a.yuzurune_notify_enabled !== 0,
+        yuzurune_mention_level: a.yuzurune_mention_level ?? 'failure_only',
         packet_threshold: a.packet_threshold ?? null,
         packet_alert_enabled: !!a.packet_alert_enabled,
+        packet_alert_mention_enabled: a.packet_alert_mention_enabled !== 0,
         token_valid: a.token_expires_at !== null,
         token_expires_at: a.token_expires_at,
         created_at: a.created_at,
@@ -81,8 +83,10 @@ accounts.get('/:id', async (c) => {
         cust_id: account.cust_id,
         yuzurune_enabled: !!account.yuzurune_enabled,
         yuzurune_notify_enabled: account.yuzurune_notify_enabled !== 0,
+        yuzurune_mention_level: account.yuzurune_mention_level ?? 'failure_only',
         packet_threshold: account.packet_threshold ?? null,
         packet_alert_enabled: !!account.packet_alert_enabled,
+        packet_alert_mention_enabled: account.packet_alert_mention_enabled !== 0,
         token_valid: account.token_expires_at ? new Date(account.token_expires_at) > new Date() : false,
         token_expires_at: account.token_expires_at,
         created_at: account.created_at,
@@ -158,6 +162,11 @@ accounts.put('/:id', async (c) => {
         values.push(body.yuzurune_notify_enabled ? 1 : 0);
     }
 
+    if (body.yuzurune_mention_level !== undefined) {
+        updates.push('yuzurune_mention_level = ?');
+        values.push(body.yuzurune_mention_level);
+    }
+
     if (body.packet_threshold !== undefined) {
         updates.push('packet_threshold = ?');
         values.push(body.packet_threshold ?? null);
@@ -166,6 +175,11 @@ accounts.put('/:id', async (c) => {
     if (body.packet_alert_enabled !== undefined) {
         updates.push('packet_alert_enabled = ?');
         values.push(body.packet_alert_enabled ? 1 : 0);
+    }
+
+    if (body.packet_alert_mention_enabled !== undefined) {
+        updates.push('packet_alert_mention_enabled = ?');
+        values.push(body.packet_alert_mention_enabled ? 1 : 0);
     }
 
     if (updates.length === 0) {

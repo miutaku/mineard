@@ -72,12 +72,15 @@ export interface PacketAlertItem {
     remainingMb: number;
     thresholdMb: number;
     discordMentionId: string | null;
+    mentionEnabled: boolean;
 }
 
 export async function notifyPacketLowAlert(env: Env, alerts: PacketAlertItem[]): Promise<void> {
     if (!env.DISCORD_WEBHOOK_URL || alerts.length === 0) return;
 
-    const mentionIds = [...new Set(alerts.map((a) => a.discordMentionId).filter(Boolean))];
+    const mentionIds = [...new Set(
+        alerts.filter((a) => a.mentionEnabled).map((a) => a.discordMentionId).filter(Boolean)
+    )];
     const mentionStr = mentionIds.map((id) => `<@${id}>`).join(' ');
 
     const fields = alerts.map((a) => ({

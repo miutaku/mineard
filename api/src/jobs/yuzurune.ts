@@ -27,7 +27,7 @@ export async function runYuzurune(env: Env): Promise<void> {
              JOIN users u ON a.user_id = u.id
              WHERE a.yuzurune_enabled = 1`
         )
-        .all<Account & { discord_mention_id: string | null }>();
+        .all<Account & { discord_mention_id: string | null; yuzurune_mention_level: string | null }>();
 
     if (!accounts.results || accounts.results.length === 0) {
         console.log('[Yuzurune] No enabled accounts found');
@@ -49,13 +49,19 @@ export async function runYuzurune(env: Env): Promise<void> {
 
 async function processAccount(
     db: D1Database,
-    account: Account & { discord_mention_id: string | null },
+    account: Account & { discord_mention_id: string | null; yuzurune_mention_level: string | null },
     todayStr: string,
     encKey: string,
     env: Env
 ): Promise<void> {
     const displayName = account.display_name;
-    const mentionId = account.yuzurune_notify_enabled ? account.discord_mention_id : null;
+    const level = account.yuzurune_mention_level ?? 'failure_only';
+    const successMentionId = account.yuzurune_notify_enabled && level === 'always'
+        ? account.discord_mention_id
+        : null;
+    const failureMentionId = account.yuzurune_notify_enabled && (level === 'always' || level === 'failure_only')
+        ? account.discord_mention_id
+        : null;
 
     // Check if already succeeded today
     const existingLog = await db
@@ -82,7 +88,7 @@ async function processAccount(
         const message = `Token refresh failed: ${err instanceof Error ? err.message : String(err)}`;
         console.error(`[Yuzurune] ${displayName}: ${message}`);
         await insertLog(db, account.id, 'failed', message);
-        await notifyYuzuruneFailed(env, displayName, message, mentionId);
+        await notifyYuzuruneFailed(env, displayName, message, failureMentionId);
         return;
     }
 
@@ -94,7 +100,7 @@ async function processAccount(
             if (result.resultCode === '00') {
                 console.log(`[Yuzurune] ${displayName}: Declaration succeeded (attempt ${attempt})`);
                 await insertLog(db, account.id, 'success', `宣言完了 (attempt ${attempt})`);
-                await notifyYuzuruneSuccess(env, displayName, `宣言完了 (attempt ${attempt})`, mentionId);
+                await notifyYuzuruneSuccess(env, displayName, `宣言完了 (attempt ${attempt})`, successMentionId);
                 return;
             }
 
@@ -111,7 +117,7 @@ async function processAccount(
             if (attempt === MAX_RETRIES) {
                 const failMessage = `${MAX_RETRIES}回リトライ後失敗: ${msg}`;
                 await insertLog(db, account.id, 'failed', failMessage);
-                await notifyYuzuruneFailed(env, displayName, failMessage, mentionId);
+                await notifyYuzuruneFailed(env, displayName, failMessage, failureMentionId);
             }
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
@@ -120,7 +126,7 @@ async function processAccount(
             if (attempt === MAX_RETRIES) {
                 const failMessage = `${MAX_RETRIES}回リトライ後エラー: ${errMsg}`;
                 await insertLog(db, account.id, 'failed', failMessage);
-                await notifyYuzuruneFailed(env, displayName, failMessage, mentionId);
+                await notifyYuzuruneFailed(env, displayName, failMessage, failureMentionId);
             }
         }
     }
