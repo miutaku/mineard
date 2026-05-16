@@ -8,6 +8,10 @@ dist/
 # Wrangler
 .wrangler/
 .dev.vars
+*.local.toml
+
+# Cache
+.cache/
 
 # Environment variables
 .env
