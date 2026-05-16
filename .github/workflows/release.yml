@@ -41,7 +41,7 @@ jobs:
       - run: npm run build
         env:
           VITE_APP_VERSION: ${{ github.ref_name }}
-      - run: npx wrangler pages deploy dist --project-name=mineard-web --commit-dirty=true
+      - run: npx wrangler pages deploy dist --project-name=mineard-web --branch=main --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
