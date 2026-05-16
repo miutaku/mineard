@@ -16,7 +16,6 @@ crons = ["50 * * * *", "0 4-14 * * *", "0 0 26 * *", "*/10 * * * *"]
 APP_ENV = "production"
 FRONTEND_URL = "https://mineard-web.pages.dev"
 MINEO_APP_ID = "jp.mineo.app"
-MINEO_APP_VERSION = "8.0.0"
 MINEO_BASE_URL = "https://api.eonet.jp/mineo/v1"
 MINEO_OIDC_TOKEN_URL = "https://login.eonet.jp/oidc/v1/token"
-MINEO_OIDC_CLIENT_ID = "100064798"
+# MINEO_APP_VERSION and MINEO_OIDC_CLIENT_ID are managed as wrangler secrets
