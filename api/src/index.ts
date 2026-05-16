@@ -16,6 +16,7 @@ import dashboardRoutes from './routes/dashboard';
 import mineoLoginRoutes from './routes/mineo-login';
 import profileRoutes from './routes/profile';
 import { runYuzurune } from './jobs/yuzurune';
+import { runTokenRefresh } from './jobs/token-refresh';
 import { runPacketExchange } from './jobs/packet-exchange';
 import { runPacketAlert } from './jobs/packet-alert';
 
@@ -56,6 +57,10 @@ export default {
         console.log(`[Cron] Triggered: ${event.cron} at ${new Date().toISOString()}`);
 
         switch (event.cron) {
+            case '50 * * * *':
+                // トークン事前リフレッシュ — 毎時:50（24時間、ゆずるね。宣言の10分前に常に実行）
+                ctx.waitUntil(runTokenRefresh(env));
+                break;
             case '0 4-14 * * *':
                 // ゆずるね。宣言 — 毎時13:00-23:00 JST
                 ctx.waitUntil(runYuzurune(env));
