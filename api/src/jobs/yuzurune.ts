@@ -40,8 +40,17 @@ export async function runYuzurune(env: Env): Promise<void> {
     const jstDate = new Date(now.getTime() + jstOffset);
     const todayStr = jstDate.toISOString().split('T')[0]; // yyyy-MM-dd
 
+    // If today is Sat(6) or Sun(0) in JST, pass last Friday's date for weekend skip check
+    const dow = jstDate.getUTCDay();
+    let lastFridayStr: string | null = null;
+    if (dow === 6 || dow === 0) {
+        const daysBack = dow === 6 ? 1 : 2;
+        const friday = new Date(jstDate.getTime() - daysBack * 24 * 60 * 60 * 1000);
+        lastFridayStr = friday.toISOString().split('T')[0];
+    }
+
     for (const account of accounts.results) {
-        await processAccount(db, account, todayStr, env.ENCRYPTION_KEY, env);
+        await processAccount(db, account, todayStr, lastFridayStr, env.ENCRYPTION_KEY, env);
     }
 
 }
@@ -51,6 +60,7 @@ async function processAccount(
     db: D1Database,
     account: Account & { discord_mention_id: string | null; yuzurune_mention_level: string | null },
     todayStr: string,
+    lastFridayStr: string | null,
     encKey: string,
     env: Env
 ): Promise<void> {
@@ -62,6 +72,24 @@ async function processAccount(
     const failureMentionId = account.yuzurune_notify_enabled && (level === 'always' || level === 'failure_only')
         ? account.discord_mention_id
         : null;
+
+    // Skip on weekends if Friday's declaration already succeeded
+    if (lastFridayStr) {
+        const fridayLog = await db
+            .prepare(
+                `SELECT id FROM job_logs
+                 WHERE job_type = 'yuzurune'
+                   AND account_id = ?
+                   AND status = 'success'
+                   AND date(executed_at) = ?`
+            )
+            .bind(account.id, lastFridayStr)
+            .first();
+        if (fridayLog) {
+            console.log(`[Yuzurune] ${displayName}: Weekend skip — declared on Friday (${lastFridayStr})`);
+            return;
+        }
+    }
 
     // Check if already succeeded today
     const existingLog = await db
