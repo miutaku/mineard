@@ -13,6 +13,8 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
       - uses: actions/setup-node@v6
         with:
           node-version: '26'
@@ -32,6 +34,8 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
       - uses: actions/setup-node@v6
         with:
           node-version: '26'
