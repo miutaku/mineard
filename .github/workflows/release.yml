@@ -58,6 +58,6 @@ jobs:
     steps:
       - uses: sarisia/actions-status-discord@v1
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK_APP }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK_GHA }}
           status: ${{ (needs.release-api.result == 'success' && needs.release-web.result == 'success') && 'success' || 'failure' }}
           title: Release ${{ github.ref_name }}
