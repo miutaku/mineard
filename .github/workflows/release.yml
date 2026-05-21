@@ -56,42 +56,40 @@ jobs:
     needs: [release-api, release-web]
     permissions:
       contents: write
+      models: read
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
-      - name: Generate changelog with AI
-        id: changelog
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get commits since last tag
+        id: commits
         run: |
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -1)
           if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --oneline)
+            LOG=$(git log --oneline)
           else
-            COMMITS=$(git log --oneline "${PREV_TAG}".."${{ github.ref_name }}")
+            LOG=$(git log --oneline "${PREV_TAG}".."${{ github.ref_name }}")
           fi
-
-          PAYLOAD=$(jq -n \
-            --arg commits "$COMMITS" \
-            --arg version "${{ github.ref_name }}" \
-            '{
-              model: "gpt-4o-mini",
-              messages: [{
-                role: "user",
-                content: ("以下は \($version) のgitコミットログです。リリースノートを日本語で生成してください。新機能・バグ修正・改善などをカテゴリ分けし、エンドユーザーが理解しやすい形式でまとめてください。技術的な詳細は簡潔に。\n\n" + $commits)
-              }]
-            }')
-
-          CHANGELOG=$(curl -sf https://models.inference.ai.azure.com/chat/completions \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" | jq -r '.choices[0].message.content')
-
-          echo "$CHANGELOG" > changelog.md
+          echo "log<<EOF" >> $GITHUB_OUTPUT
+          echo "$LOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Generate changelog with AI
+        id: changelog
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o-mini
+          max-tokens: 2000
+          system-prompt: |
+            あなたはソフトウェアのリリースノートを作成するアシスタントです。
+            gitコミットログをもとに、日本語でリリースノートを生成してください。
+            新機能・バグ修正・改善などをカテゴリ分けし、エンドユーザーが理解しやすい形式でまとめてください。
+            技術的な詳細は簡潔に。
+          prompt: ${{ steps.commits.outputs.log }}
       - name: Create Release
-        run: gh release create ${{ github.ref_name }} --notes-file changelog.md --title "${{ github.ref_name }}"
+        run: |
+          echo "${{ steps.changelog.outputs.response }}" > changelog.md
+          gh release create ${{ github.ref_name }} --notes-file changelog.md --title "${{ github.ref_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: sarisia/actions-status-discord@v1
