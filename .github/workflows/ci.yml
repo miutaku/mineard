@@ -36,3 +36,14 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  notify:
+    name: Notify Discord
+    runs-on: ubuntu-latest
+    needs: [check-api, check-web]
+    if: always()
+    steps:
+      - uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_APP }}
+          status: ${{ (needs.check-api.result == 'success' && needs.check-web.result == 'success') && 'success' || 'failure' }}
