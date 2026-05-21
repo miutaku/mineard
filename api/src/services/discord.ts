@@ -36,8 +36,8 @@ async function sendWebhook(webhookUrl: string, payload: DiscordWebhookPayload): 
 
 // ゆずるね。成功通知
 export async function notifyYuzuruneSuccess(env: Env, accountName: string, message: string, discordMentionId?: string | null): Promise<void> {
-    if (!env.DISCORD_WEBHOOK_URL) return;
-    await sendWebhook(env.DISCORD_WEBHOOK_URL, {
+    if (!env.DISCORD_WEBHOOK_APP) return;
+    await sendWebhook(env.DISCORD_WEBHOOK_APP, {
         username: 'Mineard',
         ...(discordMentionId ? { content: `<@${discordMentionId}>` } : {}),
         embeds: [{
@@ -52,8 +52,8 @@ export async function notifyYuzuruneSuccess(env: Env, accountName: string, messa
 
 // ゆずるね。失敗通知（MAX_RETRIESを超えた場合）
 export async function notifyYuzuruneFailed(env: Env, accountName: string, message: string, discordMentionId?: string | null): Promise<void> {
-    if (!env.DISCORD_WEBHOOK_URL) return;
-    await sendWebhook(env.DISCORD_WEBHOOK_URL, {
+    if (!env.DISCORD_WEBHOOK_APP) return;
+    await sendWebhook(env.DISCORD_WEBHOOK_APP, {
         username: 'Mineard',
         ...(discordMentionId ? { content: `<@${discordMentionId}>` } : {}),
         embeds: [{
@@ -76,7 +76,7 @@ export interface PacketAlertItem {
 }
 
 export async function notifyPacketLowAlert(env: Env, alerts: PacketAlertItem[]): Promise<void> {
-    if (!env.DISCORD_WEBHOOK_URL || alerts.length === 0) return;
+    if (!env.DISCORD_WEBHOOK_APP || alerts.length === 0) return;
 
     const mentionIds = [...new Set(
         alerts.filter((a) => a.mentionEnabled).map((a) => a.discordMentionId).filter(Boolean)
@@ -89,7 +89,7 @@ export async function notifyPacketLowAlert(env: Env, alerts: PacketAlertItem[]):
         inline: false,
     }));
 
-    await sendWebhook(env.DISCORD_WEBHOOK_URL, {
+    await sendWebhook(env.DISCORD_WEBHOOK_APP, {
         username: 'Mineard',
         ...(mentionStr ? { content: `${mentionStr} パケット残量が閾値を下回りました` } : {}),
         embeds: [{
@@ -104,7 +104,7 @@ export async function notifyPacketLowAlert(env: Env, alerts: PacketAlertItem[]):
 
 // パケット交換ジョブのサマリー通知
 export async function notifyPacketExchangeResult(env: Env, results: ExchangeResult[]): Promise<void> {
-    if (!env.DISCORD_WEBHOOK_URL) return;
+    if (!env.DISCORD_WEBHOOK_APP) return;
 
     const successCount = results.filter(r => r.status === 'success').length;
     const failedCount = results.filter(r => r.status === 'failed').length;
@@ -133,7 +133,7 @@ export async function notifyPacketExchangeResult(env: Env, results: ExchangeResu
         fields.push({ name: '合計交換量', value: `**${totalAmount.toLocaleString()}MB**`, inline: false });
     }
 
-    await sendWebhook(env.DISCORD_WEBHOOK_URL, {
+    await sendWebhook(env.DISCORD_WEBHOOK_APP, {
         username: 'Mineard',
         embeds: [{
             title,
