@@ -1,7 +1,7 @@
 /**
  * パケット残量アラートジョブ
  *
- * Cron: 0 1 * * * (UTC) = 毎日 10:00 JST
+ * Cron: every 10 minutes
  * ロジック:
  *   1. packet_threshold が設定されている全アカウントを取得
  *   2. 各アカウントの総残量を取得（base + charge + forward + gift）

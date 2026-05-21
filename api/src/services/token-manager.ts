@@ -17,11 +17,11 @@ export async function decryptTokens(account: Account, encKey: string): Promise<D
     return { idToken, refreshToken };
 }
 
-/** Check if id_token is still valid (with 5min buffer) */
+/** Check if id_token is still valid (with 15min buffer) */
 export function isTokenValid(account: Account): boolean {
     if (!account.id_token || !account.token_expires_at) return false;
     const expiresAt = new Date(account.token_expires_at);
-    const bufferMs = 5 * 60 * 1000; // 5 minutes
+    const bufferMs = 15 * 60 * 1000; // 15 minutes — ensures token-refresh at :50 catches tokens expiring before :05
     return Date.now() < expiresAt.getTime() - bufferMs;
 }
 
@@ -49,33 +49,41 @@ export async function refreshAndSave(
 
     const body = await response.json() as TokenRefreshResponse | TokenRefreshError;
 
-    if ('error' in body) {
-        const errorDesc = (body as TokenRefreshError).error_description || (body as TokenRefreshError).error;
-        if (errorDesc.includes('invalid') || errorDesc.includes('expired')) {
-            // Token is definitively dead, wipe it out so UI shows '無効'
-            await db.prepare('UPDATE accounts SET id_token = NULL, token_expires_at = NULL WHERE id = ?')
-                .bind(account.id)
-                .run();
-        }
-        throw new Error(`Token refresh failed: ${errorDesc}`);
+    if (!('error' in body)) {
+        const tokenResp = body as TokenRefreshResponse;
+        const expiresAt = new Date(Date.now() + parseInt(tokenResp.expires_in) * 1000).toISOString();
+        const encryptedIdToken = await encrypt(tokenResp.id_token, encKey);
+        const encryptedRefreshToken = await encrypt(tokenResp.refresh_token, encKey);
+        await db
+            .prepare('UPDATE accounts SET id_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?')
+            .bind(encryptedIdToken, encryptedRefreshToken, expiresAt, account.id)
+            .run();
+        return tokenResp.id_token;
     }
 
-    const tokenResp = body as TokenRefreshResponse;
-    const expiresAt = new Date(Date.now() + parseInt(tokenResp.expires_in) * 1000).toISOString();
+    const errorDesc = (body as TokenRefreshError).error_description || (body as TokenRefreshError).error;
 
-    // Encrypt new tokens
-    const encryptedIdToken = await encrypt(tokenResp.id_token, encKey);
-    const encryptedRefreshToken = await encrypt(tokenResp.refresh_token, encKey);
+    // If OIDC says the refresh token doesn't exist, another concurrent job (e.g. packet-alert
+    // running at the same :00 UTC tick as yuzurune) may have already consumed it and saved a
+    // fresh token. Re-fetch from DB and use that token if it is now valid.
+    if (errorDesc.includes('not exists') || errorDesc.includes('not_exists')) {
+        const freshAccount = await db
+            .prepare('SELECT * FROM accounts WHERE id = ?')
+            .bind(account.id)
+            .first<Account>();
+        if (freshAccount && isTokenValid(freshAccount)) {
+            const { idToken } = await decryptTokens(freshAccount, encKey);
+            return idToken;
+        }
+    }
 
-    // Update DB
-    await db
-        .prepare(
-            'UPDATE accounts SET id_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
-        )
-        .bind(encryptedIdToken, encryptedRefreshToken, expiresAt, account.id)
-        .run();
-
-    return tokenResp.id_token;
+    if (errorDesc.includes('invalid') || errorDesc.includes('expired')) {
+        // Token is definitively dead, wipe it out so UI shows '無効'
+        await db.prepare('UPDATE accounts SET id_token = NULL, token_expires_at = NULL WHERE id = ?')
+            .bind(account.id)
+            .run();
+    }
+    throw new Error(`Token refresh failed: ${errorDesc}`);
 }
 
 /**
