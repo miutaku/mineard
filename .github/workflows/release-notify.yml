@@ -1,0 +1,17 @@
+name: Release Notify
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    name: Notify Discord
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
+          status: success
+          title: Release ${{ github.event.release.tag_name }}
+          description: ${{ github.event.release.html_url }}
