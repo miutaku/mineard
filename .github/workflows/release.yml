@@ -50,6 +50,51 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [release-api, release-web]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+      - name: Generate changelog with AI
+        id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log --oneline "${PREV_TAG}".."${{ github.ref_name }}")
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg commits "$COMMITS" \
+            --arg version "${{ github.ref_name }}" \
+            '{
+              model: "gpt-4o-mini",
+              messages: [{
+                role: "user",
+                content: ("以下は \($version) のgitコミットログです。リリースノートを日本語で生成してください。新機能・バグ修正・改善などをカテゴリ分けし、エンドユーザーが理解しやすい形式でまとめてください。技術的な詳細は簡潔に。\n\n" + $commits)
+              }]
+            }')
+
+          CHANGELOG=$(curl -sf https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | jq -r '.choices[0].message.content')
+
+          echo "$CHANGELOG" > changelog.md
+      - name: Create Release
+        run: gh release create ${{ github.ref_name }} --notes-file changelog.md --title "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   notify:
     name: Notify Discord
     runs-on: ubuntu-latest
