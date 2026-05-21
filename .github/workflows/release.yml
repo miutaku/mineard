@@ -94,6 +94,12 @@ jobs:
         run: gh release create ${{ github.ref_name }} --notes-file changelog.md --title "${{ github.ref_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
+          status: success
+          title: Release ${{ github.ref_name }}
+          description: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
 
   notify:
     name: Notify Discord
