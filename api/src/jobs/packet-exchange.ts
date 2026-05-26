@@ -1,7 +1,7 @@
 /**
  * パケットギフト交換ジョブ
  *
- * Cron: 0 0 26 * * (UTC) = 26日 09:00 JST
+ * Cron: 0 0 1 * * (UTC) = 1日 09:00 JST
  * ロジック:
  *   有効な各GiftPairについて:
  *   1. Source: get_capacity → forwardRemainingCapacity 確認

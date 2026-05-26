@@ -10,7 +10,7 @@ database_name = "mineard"
 database_id = "c77f74d5-39de-40d7-95a9-2ea035265231"
 
 [triggers]
-crons = ["50 * * * *", "0 4-14 * * *", "0 0 26 * *", "*/10 * * * *"]
+crons = ["50 * * * *", "0 4-14 * * *", "0 0 1 * *", "*/10 * * * *"]
 
 [vars]
 APP_ENV = "production"

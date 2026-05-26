@@ -155,7 +155,7 @@ export default function GiftPairs() {
             </Group>
 
             <Text size="sm" c="dimmed">
-                毎月26日に、送信元の繰越パケットを送信先に送り、同額を返送してもらうことで有効期限をリセットします。
+                毎月1日に、送信元の繰越パケットを送信先に送り、同額を返送してもらうことで有効期限をリセットします。
             </Text>
 
             <Card withBorder radius="md" shadow="sm">

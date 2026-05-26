@@ -65,8 +65,8 @@ export default {
                 // ゆずるね。宣言 — 毎時13:00-23:00 JST
                 ctx.waitUntil(runYuzurune(env));
                 break;
-            case '0 0 26 * *':
-                // パケットギフト交換 — 毎月26日 09:00 JST
+            case '0 0 1 * *':
+                // パケットギフト交換 — 毎月1日 09:00 JST
                 ctx.waitUntil(runPacketExchange(env));
                 break;
             case '*/10 * * * *':
