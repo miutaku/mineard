@@ -76,7 +76,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
       - name: Generate changelog with AI
         id: changelog
-        uses: actions/ai-inference@v1
+        uses: actions/ai-inference@v2
         with:
           model: openai/gpt-4o-mini
           max-tokens: 2000
