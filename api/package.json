@@ -11,12 +11,12 @@
     "db:migrate:local": "wrangler d1 execute mineard --local --file=src/db/schema.sql"
   },
   "dependencies": {
-    "hono": "^4.7.0",
+    "hono": "^4.12.23",
     "otpauth": "^9.4.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250214.0",
+    "@cloudflare/workers-types": "^4.20260530.1",
     "typescript": "^6.0.0",
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.95.0"
   }
 }
