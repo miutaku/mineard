@@ -25,12 +25,57 @@ import { notifyPacketExchangeResult, type ExchangeResult } from '../services/dis
 
 const MAX_GIFT_PER_ISSUE = 9999; // mineo gift limit per issue
 const MIN_GIFT_AMOUNT = 10; // mineo minimum
+const JOB_LOCK_KEY = 'packet_exchange_lock';
+const JOB_LOCK_TTL_MS = 15 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function runPacketExchange(env: Env): Promise<void> {
     const db = env.DB;
+    const lockValue = await acquireJobLock(db);
 
+    if (!lockValue) {
+        console.warn('[PacketExchange] Another packet exchange job is already running; skipped');
+        await insertLog(db, null, 'skipped', '別のパケット交換が実行中のためスキップ');
+        return;
+    }
+
+    try {
+        await runPacketExchangeLocked(env);
+    } finally {
+        await releaseJobLock(db, lockValue);
+    }
+}
+
+export async function runPacketOneWayTransfer(
+    env: Env,
+    sourceAccountId: number,
+    targetAccountId: number,
+    amount: number
+): Promise<void> {
+    const db = env.DB;
+    const lockValue = await acquireJobLock(db);
+
+    if (!lockValue) {
+        console.warn('[PacketTransfer] Another packet job is already running; skipped');
+        await insertLog(db, sourceAccountId, 'skipped', '別のパケット処理が実行中のためパケット送信をスキップ');
+        return;
+    }
+
+    try {
+        await processOneWayTransfer(db, sourceAccountId, targetAccountId, amount, env.ENCRYPTION_KEY, env);
+    } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[PacketTransfer] ${sourceAccountId} → ${targetAccountId}: ${errMsg}`);
+        await insertLog(db, sourceAccountId, 'failed', `パケット送信エラー: ${errMsg}`);
+        throw err;
+    } finally {
+        await releaseJobLock(db, lockValue);
+    }
+}
+
+async function runPacketExchangeLocked(env: Env): Promise<void> {
+    const db = env.DB;
     // Get all enabled gift pairs with joined account info
     const pairs = await db
         .prepare(
@@ -78,6 +123,28 @@ export async function runPacketExchange(env: Env): Promise<void> {
     await notifyPacketExchangeResult(env, results);
 }
 
+async function acquireJobLock(db: D1Database): Promise<string | null> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + JOB_LOCK_TTL_MS).toISOString();
+    const result = await db
+        .prepare(
+            `INSERT INTO app_config (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value
+             WHERE app_config.value < ?`
+        )
+        .bind(JOB_LOCK_KEY, expiresAt, now.toISOString())
+        .run();
+
+    return result.meta.changes > 0 ? expiresAt : null;
+}
+
+async function releaseJobLock(db: D1Database, lockValue: string): Promise<void> {
+    await db
+        .prepare('DELETE FROM app_config WHERE key = ? AND value = ?')
+        .bind(JOB_LOCK_KEY, lockValue)
+        .run();
+}
+
 async function processPair(
     db: D1Database,
     pair: GiftPair & {
@@ -115,12 +182,14 @@ async function processPair(
     }
 
     const forwardRemaining = capacity.packetInfo.forwardRemainingCapacity;
-    log(`繰越パケット残量: ${forwardRemaining}MB`);
+    const giftRemaining = capacity.packetInfo.giftRemainingCapacity;
+    const resettableRemaining = forwardRemaining + giftRemaining;
+    log(`期限リセット対象: 繰越${forwardRemaining}MB + ギフト${giftRemaining}MB = ${resettableRemaining}MB`);
 
-    if (forwardRemaining < MIN_GIFT_AMOUNT) {
-        log(`繰越パケットが${MIN_GIFT_AMOUNT}MB未満のためスキップ`);
-        await insertLog(db, pair.source_account_id, 'skipped', `繰越パケット${forwardRemaining}MBのためスキップ`);
-        return { sourceName: pair.source_name, targetName: pair.target_name, status: 'skipped', message: `繰越パケット${forwardRemaining}MB` };
+    if (resettableRemaining < MIN_GIFT_AMOUNT) {
+        log(`期限リセット対象パケットが${MIN_GIFT_AMOUNT}MB未満のためスキップ`);
+        await insertLog(db, pair.source_account_id, 'skipped', `期限リセット対象パケット${resettableRemaining}MBのためスキップ`);
+        return { sourceName: pair.source_name, targetName: pair.target_name, status: 'skipped', message: `対象パケット${resettableRemaining}MB` };
     }
 
     // Step 2: Check gift-able capacity
@@ -129,7 +198,7 @@ async function processPair(
         throw new Error(`get_capacity_for_gift failed: ${giftCapacity.resultCode}`);
     }
 
-    const giftableAmount = Math.min(forwardRemaining, giftCapacity.capacityForGift);
+    const giftableAmount = Math.min(resettableRemaining, giftCapacity.capacityForGift);
     if (giftableAmount < MIN_GIFT_AMOUNT) {
         log(`ギフト可能容量${giftableAmount}MB未満のためスキップ`);
         await insertLog(db, pair.source_account_id, 'skipped', `ギフト可能容量不足: ${giftableAmount}MB`);
@@ -138,13 +207,17 @@ async function processPair(
 
     log(`ギフト対象: ${giftableAmount}MB`);
 
-    // Step 3: Source issues gift(s) to Target (split into <=9999MB chunks)
-    const giftCodes: { code: string; amount: number }[] = [];
+    // Step 3-6: Process one chunk as a full round trip before issuing the next one.
+    // This limits the amount stranded on the target if the Worker is interrupted.
     let remaining = giftableAmount;
+    let processedAmount = 0;
 
     // Refresh source token (might have expired during checks)
     const freshSourceAccount = await db.prepare('SELECT * FROM accounts WHERE id = ?').bind(pair.source_account_id).first<Account>();
     const freshSourceToken = freshSourceAccount ? await ensureValidToken(db, freshSourceAccount, encKey, env) : sourceToken;
+    const targetToken = await ensureValidToken(db, targetAccount, encKey, env);
+    const finalSourceAccount = await db.prepare('SELECT * FROM accounts WHERE id = ?').bind(pair.source_account_id).first<Account>();
+    const finalSourceToken = finalSourceAccount ? await ensureValidToken(db, finalSourceAccount, encKey, env) : freshSourceToken;
 
     while (remaining >= MIN_GIFT_AMOUNT) {
         const chunk = Math.min(remaining, MAX_GIFT_PER_ISSUE);
@@ -158,90 +231,152 @@ async function processPair(
             throw new Error(`issue_gift failed: ${issueResult.resultCode} (${issueResult.messages?.[0] ?? 'unknown'})`);
         }
 
-        giftCodes.push({ code: issueResult.giftCode, amount: chunk });
         log(`ギフト発行: ${chunk}MB (code: ${issueResult.giftCode})`);
         await insertLog(db, pair.source_account_id, 'success',
             `ギフト発行: ${chunk}MB → ${pair.target_name}`, issueResult.giftCode, chunk);
 
-        remaining -= chunk;
-        if (remaining >= MIN_GIFT_AMOUNT) await sleep(1000);
-    }
-
-    // Step 4: Target receives all gifts
-    const targetToken = await ensureValidToken(db, targetAccount, encKey, env);
-
-    for (const gift of giftCodes) {
         const receiveResult = await changeGift(
             { idToken: targetToken, env },
             pair.target_cust_id,
-            gift.code
+            issueResult.giftCode
         );
 
         if (receiveResult.resultCode !== '00') {
-            throw new Error(`change_gift failed for ${gift.code}: ${receiveResult.resultCode}`);
+            throw new Error(`change_gift failed for ${issueResult.giftCode}: ${receiveResult.resultCode}`);
         }
 
-        log(`${pair.target_name}が受取完了: ${gift.amount}MB`);
+        log(`${pair.target_name}が受取完了: ${chunk}MB`);
         await insertLog(db, pair.target_account_id, 'success',
-            `ギフト受取: ${gift.amount}MB from ${pair.source_name}`, gift.code, gift.amount);
-    }
+            `ギフト受取: ${chunk}MB from ${pair.source_name}`, issueResult.giftCode, chunk);
 
-    // Step 5: Target issues same amount back to Source
-    const returnCodes: { code: string; amount: number }[] = [];
-    let returnRemaining = giftableAmount;
-
-    // Refresh target token
-    const freshTargetAccount = await db.prepare('SELECT * FROM accounts WHERE id = ?').bind(pair.target_account_id).first<Account>();
-    const freshTargetToken = freshTargetAccount ? await ensureValidToken(db, freshTargetAccount, encKey, env) : targetToken;
-
-    while (returnRemaining >= MIN_GIFT_AMOUNT) {
-        const chunk = Math.min(returnRemaining, MAX_GIFT_PER_ISSUE);
         const returnResult = await issueGift(
-            { idToken: freshTargetToken, env },
+            { idToken: targetToken, env },
             pair.target_cust_id,
             chunk
         );
 
         if (returnResult.resultCode !== '00' || !returnResult.giftCode) {
-            throw new Error(`Return issue_gift failed: ${returnResult.resultCode}`);
+            throw new Error(`Return issue_gift failed: ${returnResult.resultCode} (${returnResult.messages?.[0] ?? 'unknown'})`);
         }
 
-        returnCodes.push({ code: returnResult.giftCode, amount: chunk });
         log(`返送ギフト発行: ${chunk}MB (code: ${returnResult.giftCode})`);
         await insertLog(db, pair.target_account_id, 'success',
             `返送ギフト発行: ${chunk}MB → ${pair.source_name}`, returnResult.giftCode, chunk);
 
-        returnRemaining -= chunk;
-        if (returnRemaining >= MIN_GIFT_AMOUNT) await sleep(1000);
-    }
-
-    // Step 6: Source receives returned gifts
-    const finalSourceAccount = await db.prepare('SELECT * FROM accounts WHERE id = ?').bind(pair.source_account_id).first<Account>();
-    const finalSourceToken = finalSourceAccount ? await ensureValidToken(db, finalSourceAccount, encKey, env) : freshSourceToken;
-
-    for (const gift of returnCodes) {
         const receiveReturn = await changeGift(
             { idToken: finalSourceToken, env },
             pair.source_cust_id,
-            gift.code
+            returnResult.giftCode
         );
 
         if (receiveReturn.resultCode !== '00') {
-            throw new Error(`Return change_gift failed for ${gift.code}: ${receiveReturn.resultCode}`);
+            throw new Error(`Return change_gift failed for ${returnResult.giftCode}: ${receiveReturn.resultCode}`);
         }
 
-        log(`${pair.source_name}が返送受取完了: ${gift.amount}MB`);
+        log(`${pair.source_name}が返送受取完了: ${chunk}MB`);
         await insertLog(db, pair.source_account_id, 'success',
-            `返送ギフト受取: ${gift.amount}MB from ${pair.target_name}`, gift.code, gift.amount);
+            `返送ギフト受取: ${chunk}MB from ${pair.target_name}`, returnResult.giftCode, chunk);
+
+        processedAmount += chunk;
+        remaining -= chunk;
+        if (remaining >= MIN_GIFT_AMOUNT) await sleep(1000);
     }
 
-    log(`交換完了！合計: ${giftableAmount}MB`);
-    return { sourceName: pair.source_name, targetName: pair.target_name, status: 'success', amount: giftableAmount };
+    if (remaining > 0) {
+        log(`${MIN_GIFT_AMOUNT}MB未満の端数${remaining}MBはギフト不可のため残しました`);
+    }
+
+    log(`交換完了！合計: ${processedAmount}MB`);
+    return { sourceName: pair.source_name, targetName: pair.target_name, status: 'success', amount: processedAmount };
+}
+
+async function processOneWayTransfer(
+    db: D1Database,
+    sourceAccountId: number,
+    targetAccountId: number,
+    amount: number,
+    encKey: string,
+    env: Env
+): Promise<void> {
+    if (!Number.isInteger(amount) || amount < MIN_GIFT_AMOUNT) {
+        throw new Error(`送信量は${MIN_GIFT_AMOUNT}MB以上の整数で指定してください`);
+    }
+
+    const sourceAccount = await db
+        .prepare('SELECT * FROM accounts WHERE id = ?')
+        .bind(sourceAccountId)
+        .first<Account>();
+    const targetAccount = await db
+        .prepare('SELECT * FROM accounts WHERE id = ?')
+        .bind(targetAccountId)
+        .first<Account>();
+
+    if (!sourceAccount || !targetAccount) {
+        throw new Error('Source or target account not found');
+    }
+
+    const log = (msg: string) =>
+        console.log(`[PacketTransfer] ${sourceAccount.display_name} → ${targetAccount.display_name}: ${msg}`);
+
+    const sourceToken = await ensureValidToken(db, sourceAccount, encKey, env);
+    const giftCapacity = await getCapacityForGift({ idToken: sourceToken, env }, sourceAccount.cust_id);
+    if (giftCapacity.resultCode !== '00' || giftCapacity.capacityForGift === null) {
+        throw new Error(`get_capacity_for_gift failed: ${giftCapacity.resultCode}`);
+    }
+
+    if (amount > giftCapacity.capacityForGift) {
+        throw new Error(`ギフト可能容量不足: requested=${amount}MB, available=${giftCapacity.capacityForGift}MB`);
+    }
+
+    const targetToken = await ensureValidToken(db, targetAccount, encKey, env);
+    let remaining = amount;
+    let processedAmount = 0;
+
+    while (remaining >= MIN_GIFT_AMOUNT) {
+        const chunk = Math.min(remaining, MAX_GIFT_PER_ISSUE);
+        const issueResult = await issueGift(
+            { idToken: sourceToken, env },
+            sourceAccount.cust_id,
+            chunk
+        );
+
+        if (issueResult.resultCode !== '00' || !issueResult.giftCode) {
+            throw new Error(`one-way issue_gift failed: ${issueResult.resultCode} (${issueResult.messages?.[0] ?? 'unknown'})`);
+        }
+
+        log(`パケット送信ギフト発行: ${chunk}MB (code: ${issueResult.giftCode})`);
+        await insertLog(db, sourceAccount.id, 'success',
+            `パケット送信ギフト発行: ${chunk}MB → ${targetAccount.display_name}`, issueResult.giftCode, chunk);
+
+        const receiveResult = await changeGift(
+            { idToken: targetToken, env },
+            targetAccount.cust_id,
+            issueResult.giftCode
+        );
+
+        if (receiveResult.resultCode !== '00') {
+            throw new Error(`one-way change_gift failed for ${issueResult.giftCode}: ${receiveResult.resultCode}`);
+        }
+
+        log(`${targetAccount.display_name}がパケット送信を受取完了: ${chunk}MB`);
+        await insertLog(db, targetAccount.id, 'success',
+            `パケット送信ギフト受取: ${chunk}MB from ${sourceAccount.display_name}`, issueResult.giftCode, chunk);
+
+        processedAmount += chunk;
+        remaining -= chunk;
+        if (remaining >= MIN_GIFT_AMOUNT) await sleep(1000);
+    }
+
+    if (remaining > 0) {
+        log(`${MIN_GIFT_AMOUNT}MB未満の端数${remaining}MBはギフト不可のため残しました`);
+    }
+
+    log(`パケット送信完了！合計: ${processedAmount}MB`);
 }
 
 async function insertLog(
     db: D1Database,
-    accountId: number,
+    accountId: number | null,
     status: string,
     message: string,
     giftCode?: string,

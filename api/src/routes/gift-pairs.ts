@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono';
 import type { HonoEnv, GiftPair } from '../types';
-import { runPacketExchange } from '../jobs/packet-exchange';
+import { runPacketExchange, runPacketOneWayTransfer } from '../jobs/packet-exchange';
 
 const giftPairs = new Hono<HonoEnv>();
 
@@ -113,11 +113,56 @@ giftPairs.delete('/:id', async (c) => {
     return c.json({ success: true });
 });
 
+/** Manually send packets one-way from a user's source account to any target account */
+giftPairs.post('/transfer', async (c) => {
+    const userId = c.get('userId');
+    const body = await c.req.json<{
+        source_account_id: number;
+        target_account_id: number;
+        amount: number;
+    }>();
+
+    const sourceAccountId = Number(body.source_account_id);
+    const targetAccountId = Number(body.target_account_id);
+    const amount = Number(body.amount);
+
+    if (!Number.isInteger(sourceAccountId) || !Number.isInteger(targetAccountId) || !Number.isInteger(amount)) {
+        return c.json({ error: 'source_account_id, target_account_id, amount are required as integers' }, 400);
+    }
+
+    if (sourceAccountId === targetAccountId) {
+        return c.json({ error: 'Source and target must be different accounts' }, 400);
+    }
+
+    if (amount < 10) {
+        return c.json({ error: 'amount must be at least 10MB' }, 400);
+    }
+
+    const source = await c.env.DB
+        .prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?')
+        .bind(sourceAccountId, userId)
+        .first();
+    const target = await c.env.DB
+        .prepare('SELECT id FROM accounts WHERE id = ?')
+        .bind(targetAccountId)
+        .first();
+
+    if (!source) {
+        return c.json({ error: '送信元アカウントが見つかりません' }, 404);
+    }
+    if (!target) {
+        return c.json({ error: '送信先アカウントが見つかりません' }, 404);
+    }
+
+    c.executionCtx.waitUntil(runPacketOneWayTransfer(c.env, sourceAccountId, targetAccountId, amount));
+    return c.json({ success: true, message: 'Packet transfer started' }, 202);
+});
+
 /** Manually trigger packet exchange for all enabled pairs */
 giftPairs.post('/execute', async (c) => {
     try {
-        await runPacketExchange(c.env);
-        return c.json({ success: true, message: 'Packet exchange executed' });
+        c.executionCtx.waitUntil(runPacketExchange(c.env));
+        return c.json({ success: true, message: 'Packet exchange started' }, 202);
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return c.json({ error: msg }, 500);
