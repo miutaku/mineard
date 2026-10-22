@@ -1,0 +1,36 @@
+name: Prepare security dependency locks
+on:
+  push:
+    branches: ['codex/security-dependencies-20261022']
+    paths:
+      - '.github/workflows/security-lock-preparation.yml'
+      - '**/package.json'
+      - 'package.json'
+      - 'go.mod'
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - run: npm install --package-lock-only --ignore-scripts
+        working-directory: api
+      - run: npm install --package-lock-only --ignore-scripts
+        working-directory: web
+      - run: npm update source-map-js --package-lock-only --ignore-scripts
+        working-directory: web
+      - name: Commit generated dependency locks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/package-lock.json web/package-lock.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix(deps): regenerate security dependency locks"
+          git push origin HEAD
